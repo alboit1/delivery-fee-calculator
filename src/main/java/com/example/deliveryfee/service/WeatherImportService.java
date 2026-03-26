@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -36,8 +37,14 @@ public class WeatherImportService {
             List<WeatherObservation> observations = weatherXmlParser.parse(xmlData);
             log.info("Parsed {} observations", observations.size());
 
-            // Save all as new records (always INSERT)
-            weatherObservationRepository.saveAll(observations);
+            LocalDateTime now = LocalDateTime.now();
+            observations.forEach(obs -> {
+                if (obs.getObservationTimestamp() == null) {
+                    obs.setObservationTimestamp(now);
+                }
+            });
+
+            observations.forEach(weatherObservationRepository::save);
             log.info("Successfully imported {} weather observations", observations.size());
         } catch (Exception e) {
             log.error("Failed to import weather data", e);
