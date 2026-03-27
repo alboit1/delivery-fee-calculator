@@ -6,11 +6,10 @@ import com.example.deliveryfee.enums.VehicleType;
 import com.example.deliveryfee.exception.BusinessRuleViolationException;
 import com.example.deliveryfee.exception.ResourceNotFoundException;
 import com.example.deliveryfee.repository.WeatherObservationRepository;
+import com.example.deliveryfee.util.WeatherPhenomenonClassifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.util.Optional;
 
 /**
  * Service for calculating delivery fees based on city, vehicle type, and latest weather data.
@@ -19,6 +18,8 @@ import java.util.Optional;
 public class DeliveryFeeService {
 
     private static final Logger log = LoggerFactory.getLogger(DeliveryFeeService.class);
+    private static final String FORBIDDEN_MESSAGE_WIND = "Usage of selected vehicle type is forbidden: wind speed exceeds 20 m/s";
+    private static final String FORBIDDEN_MESSAGE_WEATHER = "Usage of selected vehicle type is forbidden due to severe weather: ";
 
     private final WeatherObservationRepository weatherObservationRepository;
 
@@ -28,40 +29,32 @@ public class DeliveryFeeService {
 
     /**
      * Calculates the total delivery fee for a given city and vehicle type using the latest weather data.
-     *
-     * @param city        the city (Tallinn, Tartu, Pärnu)
-     * @param vehicleType the vehicle type (Car, Scooter, Bike)
-     * @return total delivery fee as double
-     * @throws BusinessRuleViolationException if usage of the vehicle is forbidden due to weather conditions
-     * @throws ResourceNotFoundException      if no weather data is found for the city
      */
     public double calculateDeliveryFee(City city, VehicleType vehicleType) {
-        WeatherObservation weather = getLatestWeather(city);
+        WeatherObservation latestWeather = getLatestWeather(city);
 
         double baseFee = getBaseFee(city, vehicleType);
-
         double extraFees = 0.0;
+
         if (vehicleType == VehicleType.SCOOTER || vehicleType == VehicleType.BIKE) {
-            extraFees += getTemperatureExtraFee(weather.getAirTemperature());
-            extraFees += getWeatherPhenomenonExtraFee(weather.getWeatherPhenomenon(), vehicleType);
+            extraFees += getTemperatureExtraFee(latestWeather.getAirTemperature());
+            extraFees += getWeatherPhenomenonExtraFee(latestWeather.getWeatherPhenomenon());
             if (vehicleType == VehicleType.BIKE) {
-                extraFees += getWindExtraFee(weather.getWindSpeed());
+                extraFees += getWindExtraFee(latestWeather.getWindSpeed());
             }
         }
 
-        double total = baseFee + extraFees;
-        log.info("Calculated fee for {} using {}: base={}, extra={}, total={}",
-                city, vehicleType, baseFee, extraFees, total);
-        return total;
+        double totalFee = baseFee + extraFees;
+        log.info(
+                "Calculated delivery fee. city={}, vehicleType={}, baseFee={}, extraFees={}, totalFee={}",
+                city, vehicleType, baseFee, extraFees, totalFee
+        );
+        return totalFee;
     }
 
     private WeatherObservation getLatestWeather(City city) {
-        Optional<WeatherObservation> latest = weatherObservationRepository
-                .findTopByCityOrderByObservationTimestampDesc(city);
-        if (latest.isEmpty()) {
-            throw new ResourceNotFoundException("No weather data available for city: " + city);
-        }
-        return latest.get();
+        return weatherObservationRepository.findTopByCityOrderByObservationTimestampDesc(city)
+                .orElseThrow(() -> new ResourceNotFoundException("No weather data available for city: " + city));
     }
 
     private double getBaseFee(City city, VehicleType vehicleType) {
@@ -94,27 +87,19 @@ public class DeliveryFeeService {
     private double getWindExtraFee(Double windSpeed) {
         if (windSpeed == null) return 0.0;
         if (windSpeed > 20.0) {
-            throw new BusinessRuleViolationException("Usage of selected vehicle type is forbidden: wind speed exceeds 20 m/s");
+            throw new BusinessRuleViolationException(FORBIDDEN_MESSAGE_WIND);
         }
         if (windSpeed >= 10.0 && windSpeed <= 20.0) return 0.5;
         return 0.0;
     }
 
-    private double getWeatherPhenomenonExtraFee(String phenomenon, VehicleType vehicleType) {
+    private double getWeatherPhenomenonExtraFee(String phenomenon) {
         if (phenomenon == null || phenomenon.isBlank()) return 0.0;
-
-        String lowerPhenom = phenomenon.toLowerCase();
-
-        if (lowerPhenom.contains("glaze") || lowerPhenom.contains("hail") || lowerPhenom.contains("thunder")) {
-            throw new BusinessRuleViolationException("Usage of selected vehicle type is forbidden due to severe weather: " + phenomenon);
+        if (WeatherPhenomenonClassifier.isForbidden(phenomenon)) {
+            throw new BusinessRuleViolationException(FORBIDDEN_MESSAGE_WEATHER + phenomenon);
         }
-
-        if (lowerPhenom.contains("snow") || lowerPhenom.contains("sleet")) {
-            return 1.0;
-        }
-        if (lowerPhenom.contains("rain")) {
-            return 0.5;
-        }
+        if (WeatherPhenomenonClassifier.isSnowOrSleet(phenomenon)) return 1.0;
+        if (WeatherPhenomenonClassifier.isRain(phenomenon)) return 0.5;
         return 0.0;
     }
 }
