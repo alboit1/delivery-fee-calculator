@@ -3,14 +3,13 @@ package com.example.deliveryfee.service;
 import com.example.deliveryfee.entity.WeatherObservation;
 import com.example.deliveryfee.enums.City;
 import com.example.deliveryfee.enums.VehicleType;
-import com.example.deliveryfee.exception.ForbiddenVehicleException;
-import com.example.deliveryfee.exception.WeatherDataNotFoundException;
+import com.example.deliveryfee.exception.BusinessRuleViolationException;
+import com.example.deliveryfee.exception.ResourceNotFoundException;
 import com.example.deliveryfee.repository.WeatherObservationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
@@ -33,8 +32,8 @@ public class DeliveryFeeService {
      * @param city        the city (Tallinn, Tartu, Pärnu)
      * @param vehicleType the vehicle type (Car, Scooter, Bike)
      * @return total delivery fee as double
-     * @throws ForbiddenVehicleException if usage of the vehicle is forbidden due to weather conditions
-     * @throws IllegalArgumentException  if no weather data is found for the city
+     * @throws BusinessRuleViolationException if usage of the vehicle is forbidden due to weather conditions
+     * @throws ResourceNotFoundException      if no weather data is found for the city
      */
     public double calculateDeliveryFee(City city, VehicleType vehicleType) {
         WeatherObservation weather = getLatestWeather(city);
@@ -60,11 +59,9 @@ public class DeliveryFeeService {
         Optional<WeatherObservation> latest = weatherObservationRepository
                 .findTopByCityOrderByObservationTimestampDesc(city);
         if (latest.isEmpty()) {
-            throw new WeatherDataNotFoundException("No weather data available for city: " + city);
+            throw new ResourceNotFoundException("No weather data available for city: " + city);
         }
-        return weatherObservationRepository
-                .findTopByCityOrderByObservationTimestampDesc(city)
-                .orElseThrow(() -> new WeatherDataNotFoundException("No weather data for " + city));
+        return latest.get();
     }
 
     private double getBaseFee(City city, VehicleType vehicleType) {
@@ -97,7 +94,7 @@ public class DeliveryFeeService {
     private double getWindExtraFee(Double windSpeed) {
         if (windSpeed == null) return 0.0;
         if (windSpeed > 20.0) {
-            throw new ForbiddenVehicleException("Usage of selected vehicle type is forbidden: wind speed exceeds 20 m/s");
+            throw new BusinessRuleViolationException("Usage of selected vehicle type is forbidden: wind speed exceeds 20 m/s");
         }
         if (windSpeed >= 10.0 && windSpeed <= 20.0) return 0.5;
         return 0.0;
@@ -109,7 +106,7 @@ public class DeliveryFeeService {
         String lowerPhenom = phenomenon.toLowerCase();
 
         if (lowerPhenom.contains("glaze") || lowerPhenom.contains("hail") || lowerPhenom.contains("thunder")) {
-            throw new ForbiddenVehicleException("Usage of selected vehicle type is forbidden due to severe weather: " + phenomenon);
+            throw new BusinessRuleViolationException("Usage of selected vehicle type is forbidden due to severe weather: " + phenomenon);
         }
 
         if (lowerPhenom.contains("snow") || lowerPhenom.contains("sleet")) {
