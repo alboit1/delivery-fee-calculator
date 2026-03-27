@@ -28,10 +28,22 @@ public class WeatherXmlParser {
 
     public List<WeatherObservation> parse(String xml) {
         List<WeatherObservation> observations = new ArrayList<>();
+
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new InputSource(new StringReader(xml)));
+
+            Element root = doc.getDocumentElement();
+            String timestampAttr = root.getAttribute("timestamp");
+
+            LocalDateTime observationTimestamp = null;
+            if (!timestampAttr.isBlank()) {
+                observationTimestamp = LocalDateTime.ofInstant(
+                        java.time.Instant.ofEpochSecond(Long.parseLong(timestampAttr)),
+                        java.time.ZoneId.systemDefault()
+                );
+            }
 
             NodeList stationNodes = doc.getElementsByTagName("station");
             for (int i = 0; i < stationNodes.getLength(); i++) {
@@ -39,34 +51,30 @@ public class WeatherXmlParser {
 
                 String name = getElementText(stationElem, "name");
                 if (!STATION_TO_CITY.containsKey(name)) {
-                    continue; // skip stations not in our list
+                    continue;
                 }
-                City city = STATION_TO_CITY.get(name);
-
-                String wmoCode = getElementText(stationElem, "wmocode");
-                String airTempStr = getElementText(stationElem, "airtemperature");
-                Double airTemperature = airTempStr != null ? Double.parseDouble(airTempStr) : null;
-                String windSpeedStr = getElementText(stationElem, "windspeed");
-                Double windSpeed = windSpeedStr != null ? Double.parseDouble(windSpeedStr) : null;
-                String weatherPhenomenon = getElementText(stationElem, "phenomenon");
-                String timestampStr = getElementText(stationElem, "timestamp");
-                LocalDateTime observationTimestamp = timestampStr != null ? LocalDateTime.parse(timestampStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME) : null;
 
                 WeatherObservation obs = new WeatherObservation();
                 obs.setStationName(name);
-                obs.setWmoCode(wmoCode);
-                obs.setAirTemperature(airTemperature);
-                obs.setWindSpeed(windSpeed);
-                obs.setWeatherPhenomenon(weatherPhenomenon);
+                obs.setCity(STATION_TO_CITY.get(name));
+                obs.setWmoCode(getElementText(stationElem, "wmocode"));
+                obs.setAirTemperature(parseDouble(getElementText(stationElem, "airtemperature")));
+                obs.setWindSpeed(parseDouble(getElementText(stationElem, "windspeed")));
+                obs.setWeatherPhenomenon(getElementText(stationElem, "phenomenon"));
                 obs.setObservationTimestamp(observationTimestamp);
-                obs.setCity(city);
-
                 observations.add(obs);
             }
+            return observations;
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse XML weather data", e);
         }
-        return observations;
+    }
+
+    private Double parseDouble(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Double.parseDouble(value);
     }
 
     private String getElementText(Element parent, String tagName) {

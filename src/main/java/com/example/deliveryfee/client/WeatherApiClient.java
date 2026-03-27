@@ -33,6 +33,9 @@ public class WeatherApiClient {
                 entity,
                 String.class
         );
+        if (response.getBody() == null || response.getBody().isBlank()) {
+            throw new RuntimeException("Weather API returned empty response");
+        }
         return response.getBody();
     }
 }
