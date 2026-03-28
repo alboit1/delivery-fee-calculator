@@ -37,8 +37,14 @@ public class WeatherImportService {
             List<WeatherObservation> observations = weatherXmlParser.parse(xmlData);
             log.info("Parsed {} observations", observations.size());
 
-            weatherObservationRepository.saveAll(observations);
+            LocalDateTime now = LocalDateTime.now();
+            observations.forEach(obs -> {
+                if (obs.getObservationTimestamp() == null) {
+                    obs.setObservationTimestamp(now);
+                }
+            });
 
+            weatherObservationRepository.saveAll(observations);
             log.info("Successfully imported {} weather observations", observations.size());
         } catch (Exception e) {
             log.error("Failed to import weather data", e);

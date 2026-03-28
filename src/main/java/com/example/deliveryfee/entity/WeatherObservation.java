@@ -14,7 +14,6 @@ public class WeatherObservation {
 
     private String stationName;
 
-    @Column(name = "wmo_code")
     private String wmoCode;
 
     private Double airTemperature;

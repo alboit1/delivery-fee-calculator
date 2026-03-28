@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 
 import java.util.List;
 
@@ -17,9 +18,9 @@ public class WeatherApiClient {
     private final RestTemplate restTemplate;
     private final String weatherApiUrl;
 
-    public WeatherApiClient(RestTemplate restTemplate,
+    public WeatherApiClient(RestTemplateBuilder restTemplateBuilder,
                             @Value("${weather.import.url}") String weatherApiUrl) {
-        this.restTemplate = restTemplate;
+        this.restTemplate = restTemplateBuilder.build();
         this.weatherApiUrl = weatherApiUrl;
     }
 
@@ -27,15 +28,13 @@ public class WeatherApiClient {
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(List.of(MediaType.APPLICATION_XML));
         HttpEntity<String> entity = new HttpEntity<>(headers);
+
         ResponseEntity<String> response = restTemplate.exchange(
                 weatherApiUrl,
                 HttpMethod.GET,
                 entity,
                 String.class
         );
-        if (response.getBody() == null || response.getBody().isBlank()) {
-            throw new RuntimeException("Weather API returned empty response");
-        }
         return response.getBody();
     }
 }
